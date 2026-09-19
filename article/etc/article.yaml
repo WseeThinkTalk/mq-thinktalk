@@ -1,0 +1,35 @@
+Name: mq
+KqConsumerConf:
+  Name: article-kq-consumer
+  Brokers:
+    - ${KAFKA_HOST}:${KAFKA_PORT}
+  Group: group-like-count
+  Topic: thinktalk_like_count
+  Offset: last
+  Consumers: 1
+  Processors: 1
+ArticleKqConsumerConf:
+  Name: article-cache-kq-consumer
+  Brokers:
+    - ${KAFKA_HOST}:${KAFKA_PORT}
+  Group: group-article-event
+  Topic: thinktalk_article
+  Offset: last
+  Consumers: 1
+  Processors: 1
+DataSource: host=${DB_HOST} port=${DB_PORT} user=${DB_USER} password=${DB_PASS} dbname=Ask sslmode=disable
+BizRedis:
+  Host: ${REDIS_HOST}:${REDIS_PORT}
+  Pass: ${REDIS_PASS}
+  Type: node
+Prometheus:
+  Host: 0.0.0.0
+  Port: 9101
+  Path: /metrics
+Telemetry:
+  Endpoint: http://127.0.0.1:14268/api/traces
+UserRPC:
+  Endpoints:
+    - 127.0.0.1:8080
+  NonBlock: true
+  Timeout: 10000

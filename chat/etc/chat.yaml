@@ -1,0 +1,16 @@
+Name: mq
+KqConsumerConf:
+  Name: chat-kq-consumer
+  Brokers:
+    - ${KAFKA_HOST}:${KAFKA_PORT}
+  Group: group-thinktalk-chat
+  Topic: thinktalk_chat
+  Offset: last
+  Consumers: 2
+  Processors: 2
+Mysql:
+  DataSource: host=${DB_HOST} port=${DB_PORT} user=${DB_USER} password=${DB_PASS} dbname=Ask sslmode=disable
+CacheRedis:
+    - Host: ${REDIS_HOST}:${REDIS_PORT}
+      Type: node
+      Pass: ${REDIS_PASS}

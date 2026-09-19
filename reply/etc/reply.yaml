@@ -1,0 +1,21 @@
+Name: mq
+KqConsumerConf:
+  Name: reply-kq-consumer
+  Brokers:
+    - ${KAFKA_HOST}:${KAFKA_PORT}
+  Group: group-thinktalk-reply
+  Topic: thinktalk_reply
+  Offset: last
+  Consumers: 1
+  Processors: 1
+Mysql:
+  DataSource: host=${DB_HOST} port=${DB_PORT} user=${DB_USER} password=${DB_PASS} dbname=Ask sslmode=disable
+CacheRedis:
+    - Host: ${REDIS_HOST}:${REDIS_PORT}
+      Type: node
+      Pass: ${REDIS_PASS}
+
+KqPusherConf:
+  Brokers:
+    - ${KAFKA_HOST}:${KAFKA_PORT}
+  Topic: thinktalk_notification
