@@ -1,0 +1,18 @@
+services:
+  mq-thinktalk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mq-thinktalk:latest
+    container_name: mq-thinktalk
+    restart: unless-stopped
+    volumes:
+      - ./etc:/app/etc
+    env_file:
+      - .env
+    networks:
+      - thinktalk-net
+
+networks:
+  thinktalk-net:
+    driver: bridge
