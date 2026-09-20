@@ -1,0 +1,40 @@
+package config
+
+import (
+	"github.com/zeromicro/go-queue/kq"
+	"github.com/zeromicro/go-zero/core/service"
+	"github.com/zeromicro/go-zero/core/stores/cache"
+	"github.com/zeromicro/go-zero/core/stores/redis"
+	"github.com/zeromicro/go-zero/zrpc"
+)
+
+type Config struct {
+	service.ServiceConf
+
+	DataSource string
+	Mysql      struct {
+		DataSource string
+	}
+	BizRedis   redis.RedisConf
+	CacheRedis cache.CacheConf
+	UserRPC    zrpc.RpcClientConf
+	Es         struct {
+		Addresses []string
+		Username  string
+		Password  string
+	}
+	KqPusherConf struct {
+		Brokers []string
+		Topic   string
+	}
+
+	ArticleKq      kq.KqConf
+	ArticleEventKq kq.KqConf
+	ChatKq         kq.KqConf
+	ConcernedKq    kq.KqConf
+	LikeKq         kq.KqConf
+	MemberKq       kq.KqConf
+	MessageKq      kq.KqConf
+	QaKq           kq.KqConf
+	ReplyKq        kq.KqConf
+}

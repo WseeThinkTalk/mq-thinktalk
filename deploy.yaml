@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: ${APP_NAMESPACE}
+  labels:
+    version: v1
+    app: mq-thinktalk
+    app.kubernetes.io/version: v1
+    app.kubernetes.io/name: mq-thinktalk
+  name: mq-thinktalk-v1
+  annotations:
+    servicemesh.kubesphere.io/enabled: 'true'
+spec:
+  replicas: ${REPLICAS}
+  selector:
+    matchLabels:
+      version: v1
+      app: mq-thinktalk
+      app.kubernetes.io/version: v1
+      app.kubernetes.io/name: mq-thinktalk
+  template:
+    metadata:
+      labels:
+        version: v1
+        app: mq-thinktalk
+        app.kubernetes.io/version: v1
+        app.kubernetes.io/name: mq-thinktalk
+      annotations:
+        sidecar.istio.io/inject: 'true'
+    spec:
+      containers:
+        - name: mq-thinktalk
+          imagePullPolicy: Always
+          image: ${IMAGE}
+          env:
+            - name: ENV
+              value: ${ENV_NAME}
+      serviceAccount: default
+      affinity: {}
+      initContainers: []
+      volumes: []
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%

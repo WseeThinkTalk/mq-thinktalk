@@ -1,15 +1,18 @@
 FROM golang:1.26-alpine AS builder
 
-WORKDIR /build
+LABEL stage=gobuilder
 
+ENV CGO_ENABLED=0
+ENV GOOS=linux
 ENV GOPROXY=https://goproxy.cn,direct
+
+WORKDIR /build
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/mq-thinktalk .
+RUN go build -ldflags="-s -w" -o /app/mq-thinktalk main.go
 
 FROM alpine:3.20
 
@@ -20,5 +23,4 @@ WORKDIR /app
 COPY --from=builder /app/mq-thinktalk /app/mq-thinktalk
 COPY etc /app/etc
 
-ENTRYPOINT ["/app/mq-thinktalk"]
-CMD ["-f", "etc/mq.yaml"]
+CMD ["./mq-thinktalk", "-f", "etc/mq.yaml"]
