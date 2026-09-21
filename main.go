@@ -49,44 +49,44 @@ func main() {
 	serviceGroup := service.NewServiceGroup()
 	defer serviceGroup.Stop()
 
-	// 1. Article Consumers
-	for _, s := range article.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 1. Article Consumers - 注册文章消息消费者
+	for _, v := range article.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
-	// 2. Chat Consumer
-	for _, s := range chat.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 2. Chat Consumer - 注册聊天消息消费者
+	for _, v := range chat.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
-	// 3. Concerned Consumer
-	for _, s := range concerned.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 3. Concerned Consumer - 注册关注消息消费者
+	for _, v := range concerned.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
-	// 4. Like Consumer
-	for _, s := range like.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 4. Like Consumer - 注册点赞消息消费者
+	for _, v := range like.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
-	// 5. Member Consumer
-	for _, s := range member.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 5. Member Consumer - 注册会员消息消费者
+	for _, v := range member.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
-	// 6. Message Consumer
-	for _, s := range message.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 6. Message Consumer - 注册通知消息消费者
+	for _, v := range message.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
-	// 7. QA Consumer
-	for _, s := range qa.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 7. QA Consumer - 注册问答消息消费者
+	for _, v := range qa.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
-	// 8. Reply Consumer
-	for _, s := range reply.Consumers(ctx, svcCtx) {
-		serviceGroup.Add(s)
+	// 8. Reply Consumer - 注册评论消息消费者
+	for _, v := range reply.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
 	}
 
 	logx.Info("All 8 MQ consumers registered with unified ServiceContext. Starting thinktalk-mq service group...")

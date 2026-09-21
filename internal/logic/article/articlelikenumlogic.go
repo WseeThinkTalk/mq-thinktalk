@@ -43,18 +43,19 @@ func (l *ArticleLikeNumLogic) updateArticleLikeNum(ctx context.Context, msg *typ
 		return nil
 	}
 
-	for _, d := range msg.Data {
-		if d.BizID != types.ArticleBizID {
+	// 处理 Canal 同步的点赞数数据变更
+	for _, v := range msg.Data {
+		if v.BizID != types.ArticleBizID {
 			continue
 		}
-		id, err := strconv.ParseInt(d.ObjID, 10, 64)
+		id, err := strconv.ParseInt(v.ObjID, 10, 64)
 		if err != nil {
-			logx.Errorf("strconv.ParseInt id: %s error: %v", d.ID, err)
+			logx.Errorf("strconv.ParseInt id: %s error: %v", v.ID, err)
 			continue
 		}
-		likeNum, err := strconv.ParseInt(d.LikeNum, 10, 64)
+		likeNum, err := strconv.ParseInt(v.LikeNum, 10, 64)
 		if err != nil {
-			logx.Errorf("strconv.ParseInt likeNum: %s error: %v", d.LikeNum, err)
+			logx.Errorf("strconv.ParseInt likeNum: %s error: %v", v.LikeNum, err)
 			continue
 		}
 		err = l.svcCtx.ArticleModel.UpdateLikeNum(ctx, id, likeNum)

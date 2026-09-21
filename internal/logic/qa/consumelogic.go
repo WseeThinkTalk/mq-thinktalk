@@ -43,20 +43,21 @@ func (l *ConsumeLogic) Consume(ctx context.Context, key, val string) error {
 }
 
 func (l *ConsumeLogic) handleQuestion(ctx context.Context, msg *qaCanalMsg) error {
-	for _, row := range msg.Data {
+	// 同步问答数据变更到 Elasticsearch
+	for _, v := range msg.Data {
 		var id int64
 		var title, content, tagIds string
 		var authorId, answerNum int64
 		var status int
 		var createTime string
-		_ = json.Unmarshal(row["id"], &id)
-		_ = json.Unmarshal(row["title"], &title)
-		_ = json.Unmarshal(row["content"], &content)
-		_ = json.Unmarshal(row["author_id"], &authorId)
-		_ = json.Unmarshal(row["status"], &status)
-		_ = json.Unmarshal(row["answer_num"], &answerNum)
-		_ = json.Unmarshal(row["tag_ids"], &tagIds)
-		_ = json.Unmarshal(row["create_time"], &createTime)
+		_ = json.Unmarshal(v["id"], &id)
+		_ = json.Unmarshal(v["title"], &title)
+		_ = json.Unmarshal(v["content"], &content)
+		_ = json.Unmarshal(v["author_id"], &authorId)
+		_ = json.Unmarshal(v["status"], &status)
+		_ = json.Unmarshal(v["answer_num"], &answerNum)
+		_ = json.Unmarshal(v["tag_ids"], &tagIds)
+		_ = json.Unmarshal(v["create_time"], &createTime)
 
 		if msg.Type == "DELETE" || status == 1 {
 			l.deleteFromEs(ctx, "question-index", fmt.Sprintf("%d", id))
@@ -79,21 +80,22 @@ func (l *ConsumeLogic) handleQuestion(ctx context.Context, msg *qaCanalMsg) erro
 }
 
 func (l *ConsumeLogic) handleAnswer(ctx context.Context, msg *qaCanalMsg) error {
-	for _, row := range msg.Data {
+	// 同步回答数据变更并更新问答统计
+	for _, v := range msg.Data {
 		var id, questionId, authorId int64
 		var content string
 		var isAccepted, status int
 		var likeNum, replyNum int64
 		var createTime string
-		_ = json.Unmarshal(row["id"], &id)
-		_ = json.Unmarshal(row["question_id"], &questionId)
-		_ = json.Unmarshal(row["author_id"], &authorId)
-		_ = json.Unmarshal(row["content"], &content)
-		_ = json.Unmarshal(row["is_accepted"], &isAccepted)
-		_ = json.Unmarshal(row["status"], &status)
-		_ = json.Unmarshal(row["like_num"], &likeNum)
-		_ = json.Unmarshal(row["reply_num"], &replyNum)
-		_ = json.Unmarshal(row["create_time"], &createTime)
+		_ = json.Unmarshal(v["id"], &id)
+		_ = json.Unmarshal(v["question_id"], &questionId)
+		_ = json.Unmarshal(v["author_id"], &authorId)
+		_ = json.Unmarshal(v["content"], &content)
+		_ = json.Unmarshal(v["is_accepted"], &isAccepted)
+		_ = json.Unmarshal(v["status"], &status)
+		_ = json.Unmarshal(v["like_num"], &likeNum)
+		_ = json.Unmarshal(v["reply_num"], &replyNum)
+		_ = json.Unmarshal(v["create_time"], &createTime)
 
 		if msg.Type == "DELETE" || status == 1 {
 			l.deleteFromEs(ctx, "answer-index", fmt.Sprintf("%d", id))
