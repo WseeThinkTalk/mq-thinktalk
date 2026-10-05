@@ -94,6 +94,14 @@ func (l *ArticleLogic) articleOperate(msg *types.CanalArticleMsg) error {
 				)
 			}
 
+			// 触发推拉结合 Feed 流分水岭投递（大 V 读扩散写 Outbox，普通博主写扩散推活跃粉丝 Inbox）
+			authorId, _ := strconv.ParseInt(v.AuthorId, 10, 64)
+			artId, _ := strconv.ParseInt(v.ID, 10, 64)
+			if l.svcCtx.DB != nil {
+				dispatcher := NewFeedDispatcher(l.svcCtx.DB.DB, l.svcCtx.BizRedis, l.Logger)
+				_ = dispatcher.DispatchArticleEvent(l.ctx, authorId, artId, t.Unix())
+			}
+
 		default:
 			_, _ = l.svcCtx.BizRedis.ZremCtx(l.ctx, publishTimeKey, v.ID)
 			_, _ = l.svcCtx.BizRedis.ZremCtx(l.ctx, likeNumKey, v.ID)
