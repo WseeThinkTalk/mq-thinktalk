@@ -1,6 +1,7 @@
 package article
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -72,10 +73,41 @@ func (l *ArticleLogic) articleOperate(msg *types.CanalArticleMsg) error {
 				_, _ = l.svcCtx.BizRedis.ZaddCtx(l.ctx, globalKey, t.Unix(), v.ID)
 			}
 
+			// 同步轻量索引文档至 Elasticsearch
+			if l.svcCtx.Es != nil {
+				authorId, _ := strconv.ParseInt(v.AuthorId, 10, 64)
+				id, _ := strconv.ParseInt(v.ID, 10, 64)
+				doc := map[string]interface{}{
+					"id":           id,
+					"title":        v.Title,
+					"description":  v.Description,
+					"author_id":    authorId,
+					"status":       status,
+					"publish_time": v.PublishTime,
+				}
+				docBytes, _ := json.Marshal(doc)
+				_, _ = l.svcCtx.Es.Index(
+					"thinktalk_article",
+					bytes.NewReader(docBytes),
+					l.svcCtx.Es.Index.WithDocumentID(v.ID),
+					l.svcCtx.Es.Index.WithContext(l.ctx),
+				)
+			}
+
 		default:
 			_, _ = l.svcCtx.BizRedis.ZremCtx(l.ctx, publishTimeKey, v.ID)
 			_, _ = l.svcCtx.BizRedis.ZremCtx(l.ctx, likeNumKey, v.ID)
 			_, _ = l.svcCtx.BizRedis.ZremCtx(l.ctx, globalKey, v.ID)
+
+			// 从 ES 移除索引并淘汰详情缓存
+			if l.svcCtx.Es != nil {
+				_, _ = l.svcCtx.Es.Delete(
+					"thinktalk_article",
+					v.ID,
+					l.svcCtx.Es.Delete.WithContext(l.ctx),
+				)
+			}
+			_, _ = l.svcCtx.BizRedis.DelCtx(l.ctx, fmt.Sprintf("biz#article#detail:%s", v.ID))
 		}
 	}
 
