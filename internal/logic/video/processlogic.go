@@ -1,11 +1,10 @@
 package video
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"mq-thinktalk/internal/svc"
@@ -45,7 +44,7 @@ func (l *VideoProcessLogic) Consume(ctx context.Context, key, val string) error 
 		return err
 	}
 
-	l.Infof("[VideoProcess] starting processing for video: %d, key: %s", msg.VideoId, msg.ObjectKey)
+	l.Infof("[VideoProcess] starting zero-disk streaming processing for video: %d, key: %s", msg.VideoId, msg.ObjectKey)
 
 	if l.svcCtx.MinIO == nil {
 		l.Errorf("[VideoProcess] MinIO client is nil")
@@ -53,51 +52,46 @@ func (l *VideoProcessLogic) Consume(ctx context.Context, key, val string) error 
 		return fmt.Errorf("minio client is nil")
 	}
 
-	// 1. 下载原视频到临时目录
-	tmpDir := os.TempDir()
-	localVideoPath := filepath.Join(tmpDir, fmt.Sprintf("vid_%d_%s", msg.VideoId, filepath.Base(msg.ObjectKey)))
-	defer os.Remove(localVideoPath)
-
-	err := l.svcCtx.MinIO.FGetObject(ctx, msg.Bucket, msg.ObjectKey, localVideoPath, minio.GetObjectOptions{})
+	// 1. 生成 10 分钟临时 Presigned GET URL，用于 FFmpeg / ffprobe 远程 HTTP Range 流式读取（零本地磁盘写入）
+	presignedGetURL, err := l.svcCtx.MinIO.PresignedGetObject(ctx, msg.Bucket, msg.ObjectKey, 10*time.Minute, nil)
 	if err != nil {
-		l.Errorf("[VideoProcess] download video from minio failed: %v", err)
+		l.Errorf("[VideoProcess] generate presigned get url failed: %v", err)
+		l.markFailed(msg.VideoId, err.Error())
+		return err
+	}
+	videoStreamURL := presignedGetURL.String()
+
+	// 2. 调用 ffprobe 通过 HTTP Range 远程流式解析视频元数据（零本地磁盘写入）
+	meta, err := ffmpeg.ProbeVideoURL(ctx, videoStreamURL)
+	if err != nil {
+		l.Errorf("[VideoProcess] ffprobe remote metadata failed: %v", err)
 		l.markFailed(msg.VideoId, err.Error())
 		return err
 	}
 
-	// 2. 调用 ffprobe 提取元数据
-	meta, err := ffmpeg.ProbeVideo(ctx, localVideoPath)
+	// 3. 调用 ffmpeg 通过 HTTP Range 远程截取第 1 秒高质量封面图并直出内存管道（零磁盘 I/O）
+	coverBytes, err := ffmpeg.ExtractCoverFromURLToMemory(ctx, videoStreamURL, 1.0)
 	if err != nil {
-		l.Errorf("[VideoProcess] ffprobe metadata failed: %v", err)
+		l.Errorf("[VideoProcess] ffmpeg stream extract cover failed: %v", err)
 		l.markFailed(msg.VideoId, err.Error())
 		return err
 	}
 
-	// 3. 调用 ffmpeg 截取第 1 秒高质量封面图
+	// 4. 将内存中的封面图字节流直接 PutObject 推回 MinIO（无需任何临时磁盘文件）
 	coverFileName := fmt.Sprintf("cover_%d.jpg", msg.VideoId)
-	localCoverPath := filepath.Join(tmpDir, coverFileName)
-	defer os.Remove(localCoverPath)
-
-	if err := ffmpeg.ExtractFirstFrameCover(ctx, localVideoPath, localCoverPath); err != nil {
-		l.Errorf("[VideoProcess] ffmpeg extract cover failed: %v", err)
-		l.markFailed(msg.VideoId, err.Error())
-		return err
-	}
-
-	// 4. 将生成的封面图推回 MinIO
 	coverObjectKey := fmt.Sprintf("cover/auto/%s/%s", time.Now().Format("20060102"), coverFileName)
-	_, err = l.svcCtx.MinIO.FPutObject(ctx, msg.Bucket, coverObjectKey, localCoverPath, minio.PutObjectOptions{
+	_, err = l.svcCtx.MinIO.PutObject(ctx, msg.Bucket, coverObjectKey, bytes.NewReader(coverBytes), int64(len(coverBytes)), minio.PutObjectOptions{
 		ContentType: "image/jpeg",
 	})
 	if err != nil {
-		l.Errorf("[VideoProcess] upload cover to minio failed: %v", err)
+		l.Errorf("[VideoProcess] stream upload cover to minio failed: %v", err)
 		l.markFailed(msg.VideoId, err.Error())
 		return err
 	}
 
 	coverViewUrl := fmt.Sprintf("/static/%s/%s", msg.Bucket, coverObjectKey)
 
-	// 5. 更新 Redis/DB 状态为 ready，供前端轮询拉取
+	// 5. 更新 Redis 状态为 ready，供前端轮询拉取
 	if l.svcCtx.BizRedis != nil {
 		redisKey := fmt.Sprintf("biz#video#status:%d", msg.VideoId)
 		statusVal, _ := json.Marshal(map[string]interface{}{
@@ -111,7 +105,7 @@ func (l *VideoProcessLogic) Consume(ctx context.Context, key, val string) error 
 		_ = l.svcCtx.BizRedis.SetexCtx(ctx, redisKey, string(statusVal), 86400*7)
 	}
 
-	l.Infof("[VideoProcess] successfully completed for video: %d, cover: %s", msg.VideoId, coverViewUrl)
+	l.Infof("[VideoProcess] successfully completed zero-disk stream processing for video: %d, cover: %s", msg.VideoId, coverViewUrl)
 	return nil
 }
 
@@ -120,9 +114,9 @@ func (l *VideoProcessLogic) markFailed(videoId int64, errMsg string) {
 		redisKey := fmt.Sprintf("biz#video#status:%d", videoId)
 		statusVal, _ := json.Marshal(map[string]interface{}{
 			"status": "failed",
-			"errMsg": errMsg,
+			"error":  errMsg,
 		})
-		_ = l.svcCtx.BizRedis.SetexCtx(l.ctx, redisKey, string(statusVal), 86400*7)
+		_ = l.svcCtx.BizRedis.SetexCtx(context.Background(), redisKey, string(statusVal), 3600*24)
 	}
 }
 

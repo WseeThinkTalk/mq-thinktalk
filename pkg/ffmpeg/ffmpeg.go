@@ -103,3 +103,53 @@ func ExtractFirstFrameCover(ctx context.Context, videoPath, outputPath string) e
 
 	return nil
 }
+
+// ProbeVideoURL 调用系统 ffprobe 通过 HTTP Range 远程流式提取视频元数据（零本地磁盘写入）
+func ProbeVideoURL(ctx context.Context, videoURL string) (*VideoMetadata, error) {
+	cmd := exec.CommandContext(ctx, "ffprobe",
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_format",
+		"-show_streams",
+		videoURL,
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffprobe remote stream failed (%v): %s", err, stderr.String())
+	}
+
+	return ParseFfprobeOutput(stdout.Bytes())
+}
+
+// ExtractCoverFromURLToMemory 调用系统 ffmpeg 通过 HTTP Range 远程截取封面并直接输出到内存缓冲区（零磁盘 I/O）
+func ExtractCoverFromURLToMemory(ctx context.Context, videoURL string, atSeconds float64) ([]byte, error) {
+	timeStr := fmt.Sprintf("%02d:%02d:%02d", int(atSeconds)/3600, (int(atSeconds)%3600)/60, int(atSeconds)%60)
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-ss", timeStr,
+		"-i", videoURL,
+		"-vframes", "1",
+		"-q:v", "2",
+		"-f", "image2",
+		"-y",
+		"pipe:1",
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffmpeg stream extract cover failed (%v): %s", err, stderr.String())
+	}
+
+	if stdout.Len() == 0 {
+		return nil, fmt.Errorf("ffmpeg extracted zero bytes for cover")
+	}
+
+	return stdout.Bytes(), nil
+}
+
