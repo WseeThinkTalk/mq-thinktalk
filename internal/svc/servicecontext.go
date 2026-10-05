@@ -14,6 +14,8 @@ import (
 	"mq-thinktalk/pkg/es"
 	"mq-thinktalk/pkg/orm"
 
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/zrpc"
@@ -23,6 +25,7 @@ type ServiceContext struct {
 	Config             config.Config
 	DB                 *orm.DB
 	BizRedis           *redis.Redis
+	MinIO              *minio.Client
 	NotificationPusher *kq.Pusher
 	UserRPC            user.User
 	Es                 *es.Es
@@ -90,6 +93,16 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			Username:  c.Es.Username,
 			Password:  c.Es.Password,
 		})
+	}
+
+	if c.MinIO.Endpoint != "" {
+		minioClient, err := minio.New(c.MinIO.Endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(c.MinIO.AccessKeyID, c.MinIO.AccessKeySecret, ""),
+			Secure: c.MinIO.UseSSL,
+		})
+		if err == nil {
+			sc.MinIO = minioClient
+		}
 	}
 
 	return sc

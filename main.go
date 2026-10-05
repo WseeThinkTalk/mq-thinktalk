@@ -13,9 +13,12 @@ import (
 	"mq-thinktalk/internal/logic/message"
 	"mq-thinktalk/internal/logic/qa"
 	"mq-thinktalk/internal/logic/reply"
+	"mq-thinktalk/internal/logic/video"
 	"mq-thinktalk/internal/svc"
 	"mq-thinktalk/pkg/env"
 	"mq-thinktalk/pkg/lib/zapx"
+	"mq-thinktalk/pkg/reconcile"
+	"time"
 
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
@@ -89,6 +92,15 @@ func main() {
 		serviceGroup.Add(v)
 	}
 
-	logx.Info("All 8 MQ consumers registered with unified ServiceContext. Starting thinktalk-mq service group...")
+	// 9. Video Consumer - 注册视频流媒体抽帧处理消费者
+	for _, v := range video.Consumers(ctx, svcCtx) {
+		serviceGroup.Add(v)
+	}
+
+	// 10. Reconciliation Service - 注册离线数据对账与自动补偿治理服务
+	reconcileSvc := reconcile.NewReconciliationService(30 * time.Minute)
+	serviceGroup.Add(reconcileSvc)
+
+	logx.Info("All MQ consumers registered with unified ServiceContext. Starting thinktalk-mq service group...")
 	serviceGroup.Start()
 }

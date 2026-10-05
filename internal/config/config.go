@@ -37,4 +37,14 @@ type Config struct {
 	MessageKq      kq.KqConf
 	QaKq           kq.KqConf
 	ReplyKq        kq.KqConf
+	VideoProcessKq kq.KqConf
+
+	MinIO struct {
+		Endpoint        string
+		AccessKeyID     string
+		AccessKeySecret string
+		BucketName      string
+		Location        string
+		UseSSL          bool
+	}
 }
