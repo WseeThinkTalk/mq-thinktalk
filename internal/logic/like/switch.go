@@ -17,17 +17,12 @@ func (l *ThumbupLogic) switchLike(ctx context.Context, record *model.LikeRecord,
 		return err
 	}
 
-	count, err := l.getOrCreateCount(ctx, record.BizId, record.ObjId)
-	if err != nil {
-		return err
+	// 增量累加至批量冲刷器
+	if oldLikeType == 1 && newLikeType == 2 {
+		l.flusher.Add(record.BizId, record.ObjId, -1, 1)
+	} else if oldLikeType == 2 && newLikeType == 1 {
+		l.flusher.Add(record.BizId, record.ObjId, 1, -1)
 	}
 
-	if oldLikeType == 1 && newLikeType == 2 {
-		count.LikeNum--
-		count.DislikeNum++
-	} else if oldLikeType == 2 && newLikeType == 1 {
-		count.DislikeNum--
-		count.LikeNum++
-	}
-	return l.updateCount(ctx, count)
+	return nil
 }

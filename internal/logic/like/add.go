@@ -21,34 +21,11 @@ func (l *ThumbupLogic) addLike(ctx context.Context, msg types.ThumbupMsg) error 
 		return err
 	}
 
-	count, err := l.getOrCreateCount(ctx, msg.BizId, msg.ObjId)
-	if err != nil {
-		return err
-	}
-
+	// 增量累加至批量冲刷器，避免并发高频单行锁争用
 	if msg.LikeType == 1 {
-		count.LikeNum++
+		l.flusher.Add(msg.BizId, msg.ObjId, 1, 0)
 	} else if msg.LikeType == 2 {
-		count.DislikeNum++
-	}
-	if count.Id == 0 {
-		_, err = l.svcCtx.LikeCountModel.Insert(ctx, count)
-	} else {
-		err = l.svcCtx.LikeCountModel.Update(ctx, count)
-	}
-	if err != nil {
-		l.Errorf("[Thumbup] save like count error: %v", err)
-		return err
-	}
-
-	// 同步到目标表
-	if count.BizId == "article" {
-		err = l.svcCtx.DB.DB.WithContext(ctx).Table("article").Where("id = ?", count.ObjId).Update("like_num", count.LikeNum).Error
-	} else if count.BizId == "reply" {
-		err = l.svcCtx.DB.DB.WithContext(ctx).Table("reply").Where("reply_id = ?", count.ObjId).Update("like_num", count.LikeNum).Error
-	}
-	if err != nil {
-		l.Errorf("[Thumbup] sync like_num to %s id %d error: %v", count.BizId, count.ObjId, err)
+		l.flusher.Add(msg.BizId, msg.ObjId, 0, 1)
 	}
 
 	// 发送通知给文章/评论作者

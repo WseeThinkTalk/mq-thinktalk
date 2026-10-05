@@ -14,21 +14,17 @@ func (l *ThumbupLogic) cancelLike(ctx context.Context, record *model.LikeRecord)
 		return err
 	}
 
-	count, err := l.getOrCreateCount(ctx, record.BizId, record.ObjId)
-	if err != nil {
-		return err
-	}
-
+	// 增量累加至批量冲刷器
 	if record.LikeType == 1 {
-		count.LikeNum--
+		l.flusher.Add(record.BizId, record.ObjId, -1, 0)
 	} else if record.LikeType == 2 {
-		count.DislikeNum--
+		l.flusher.Add(record.BizId, record.ObjId, 0, -1)
 	}
 
 	// 发送取消通知给文章/评论作者
 	l.sendCancelNotification(ctx, record)
 
-	return l.updateCount(ctx, count)
+	return nil
 }
 
 func (l *ThumbupLogic) sendCancelNotification(ctx context.Context, record *model.LikeRecord) {

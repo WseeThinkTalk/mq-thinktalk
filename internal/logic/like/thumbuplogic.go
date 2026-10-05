@@ -3,6 +3,8 @@ package like
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"time"
 
 	model "mq-thinktalk/internal/model/like"
 	"mq-thinktalk/internal/svc"
@@ -11,19 +13,94 @@ import (
 	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/service"
+	"gorm.io/gorm"
 )
 
+var (
+	flusher     *BatchFlusher
+	flusherOnce sync.Once
+)
+
+func getBatchFlusher(svcCtx *svc.ServiceContext) *BatchFlusher {
+	flusherOnce.Do(func() {
+		flusher = NewBatchFlusher(BatchFlusherConfig{
+			MaxSize:  200,
+			Interval: 1 * time.Second,
+			FlushFn: func(items []*LikeDelta) error {
+				return flushLikeDeltas(context.Background(), svcCtx, items)
+			},
+		})
+		flusher.Start()
+	})
+	return flusher
+}
+
+func flushLikeDeltas(ctx context.Context, svcCtx *svc.ServiceContext, deltas []*LikeDelta) error {
+	for _, d := range deltas {
+		if d == nil {
+			continue
+		}
+
+		count, err := svcCtx.LikeCountModel.FindOneByBizIdObjId(ctx, d.BizId, d.ObjId)
+		if err != nil && err != model.ErrNotFound {
+			logx.WithContext(ctx).Errorf("[flushLikeDeltas] find like count error: %v", err)
+			continue
+		}
+		if count == nil {
+			count = &model.LikeCount{
+				BizId:      d.BizId,
+				ObjId:      d.ObjId,
+				LikeNum:    d.LikeDelta,
+				DislikeNum: d.DislikeDelta,
+			}
+			if count.LikeNum < 0 {
+				count.LikeNum = 0
+			}
+			if count.DislikeNum < 0 {
+				count.DislikeNum = 0
+			}
+			_, _ = svcCtx.LikeCountModel.Insert(ctx, count)
+		} else {
+			count.LikeNum += d.LikeDelta
+			count.DislikeNum += d.DislikeDelta
+			if count.LikeNum < 0 {
+				count.LikeNum = 0
+			}
+			if count.DislikeNum < 0 {
+				count.DislikeNum = 0
+			}
+			_ = svcCtx.LikeCountModel.Update(ctx, count)
+		}
+
+		// 同步到目标业务表
+		if d.LikeDelta != 0 {
+			if d.BizId == "article" {
+				_ = svcCtx.DB.DB.WithContext(ctx).Table("article").
+					Where("id = ?", d.ObjId).
+					Update("like_num", gorm.Expr("GREATEST(0, CAST(like_num AS SIGNED) + ?)", d.LikeDelta)).Error
+			} else if d.BizId == "reply" {
+				_ = svcCtx.DB.DB.WithContext(ctx).Table("reply").
+					Where("reply_id = ?", d.ObjId).
+					Update("like_num", gorm.Expr("GREATEST(0, CAST(like_num AS SIGNED) + ?)", d.LikeDelta)).Error
+			}
+		}
+	}
+	return nil
+}
+
 type ThumbupLogic struct {
-	ctx    context.Context
-	svcCtx *svc.ServiceContext
+	ctx     context.Context
+	svcCtx  *svc.ServiceContext
+	flusher *BatchFlusher
 	logx.Logger
 }
 
 func NewThumbupLogic(ctx context.Context, svcCtx *svc.ServiceContext) *ThumbupLogic {
 	return &ThumbupLogic{
-		ctx:    ctx,
-		svcCtx: svcCtx,
-		Logger: logx.WithContext(ctx),
+		ctx:     ctx,
+		svcCtx:  svcCtx,
+		flusher: getBatchFlusher(svcCtx),
+		Logger:  logx.WithContext(ctx),
 	}
 }
 
@@ -56,38 +133,6 @@ func (l *ThumbupLogic) Consume(ctx context.Context, key, val string) error {
 		return l.switchLike(ctx, record, msg.LikeType)
 	}
 	return l.addLike(ctx, msg)
-}
-
-func (l *ThumbupLogic) getOrCreateCount(ctx context.Context, bizId string, objId int64) (*model.LikeCount, error) {
-	count, err := l.svcCtx.LikeCountModel.FindOneByBizIdObjId(ctx, bizId, objId)
-	if err != nil && err != model.ErrNotFound {
-		l.Errorf("[Thumbup] find like count error: %v", err)
-		return nil, err
-	}
-	if count == nil {
-		return &model.LikeCount{BizId: bizId, ObjId: objId}, nil
-	}
-	return count, nil
-}
-
-func (l *ThumbupLogic) updateCount(ctx context.Context, count *model.LikeCount) error {
-	if err := l.svcCtx.LikeCountModel.Update(ctx, count); err != nil {
-		l.Errorf("[Thumbup] update like count error: %v", err)
-		return err
-	}
-
-	// 同步到目标表
-	var err error
-	if count.BizId == "article" {
-		err = l.svcCtx.DB.DB.WithContext(ctx).Table("article").Where("id = ?", count.ObjId).Update("like_num", count.LikeNum).Error
-	} else if count.BizId == "reply" {
-		err = l.svcCtx.DB.DB.WithContext(ctx).Table("reply").Where("reply_id = ?", count.ObjId).Update("like_num", count.LikeNum).Error
-	}
-	if err != nil {
-		l.Errorf("[Thumbup] sync like_num to %s id %d error: %v", count.BizId, count.ObjId, err)
-	}
-
-	return nil
 }
 
 func Consumers(ctx context.Context, svcCtx *svc.ServiceContext) []service.Service {
