@@ -15,28 +15,32 @@ import (
 	"mq-thinktalk/internal/logic/reply"
 	"mq-thinktalk/internal/logic/video"
 	"mq-thinktalk/internal/svc"
-	"mq-thinktalk/pkg/env"
+	"mq-thinktalk/pkg/lib/etcdx"
 	"mq-thinktalk/pkg/lib/zapx"
 	"mq-thinktalk/pkg/reconcile"
 	"time"
 
-	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/service"
 )
 
-var configFile = flag.String("f", "etc/mq.yaml", "the config file")
+func runRemoteConfig() *config.Config {
+	var c config.Config
+	etcdx.MustLoadRemoteConfig("/thinktalk/config/mq", &c)
+	err := c.ServiceConf.SetUp()
+	if err != nil {
+		panic(err)
+	}
+	return &c
+}
 
 func main() {
 	flag.Parse()
 
-	env.LoadEnv()
-
-	var c config.Config
-	conf.MustLoad(*configFile, &c, conf.UseEnv())
-	err := c.ServiceConf.SetUp()
-	if err != nil {
-		panic(err)
+	// 从 Etcd 配置中心拉取远程配置 (Fail-Fast)
+	c := runRemoteConfig()
+	if c == nil {
+		return
 	}
 
 	// init logger
@@ -47,7 +51,7 @@ func main() {
 
 	logx.DisableStat()
 	ctx := context.Background()
-	svcCtx := svc.NewServiceContext(c)
+	svcCtx := svc.NewServiceContext(*c)
 
 	serviceGroup := service.NewServiceGroup()
 	defer serviceGroup.Stop()
