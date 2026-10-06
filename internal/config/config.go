@@ -37,7 +37,7 @@ type Config struct {
 	MessageKq      kq.KqConf
 	QaKq           kq.KqConf
 	ReplyKq        kq.KqConf
-	VideoProcessKq kq.KqConf
+	VideoProcessKq kq.KqConf `json:",optional"`
 
 	MinIO struct {
 		Endpoint        string
@@ -46,5 +46,5 @@ type Config struct {
 		BucketName      string
 		Location        string
 		UseSSL          bool
-	}
+	} `json:",optional"`
 }
