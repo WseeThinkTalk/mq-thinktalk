@@ -47,16 +47,11 @@ type ServiceContext struct {
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
-	dsn := c.Mysql.DataSource
-	if dsn == "" {
-		dsn = c.DataSource
-	}
-
 	db := orm.MustNewPostgres(&orm.Config{
-		DSN:          dsn,
-		MaxOpenConns: 20,
-		MaxIdleConns: 50,
-		MaxLifetime:  3600,
+		DSN:          c.DB.DataSource,
+		MaxOpenConns: c.DB.MaxOpenConns,
+		MaxIdleConns: c.DB.MaxIdleConns,
+		MaxLifetime:  c.DB.MaxLifetime,
 	})
 
 	rds := redis.MustNewRedis(c.BizRedis)

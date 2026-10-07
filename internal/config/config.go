@@ -11,9 +11,11 @@ import (
 type Config struct {
 	service.ServiceConf
 
-	DataSource string
-	Mysql      struct {
-		DataSource string
+	DB         struct {
+		DataSource   string
+		MaxOpenConns int `json:",default=20"`
+		MaxIdleConns int `json:",default=50"`
+		MaxLifetime  int `json:",default=3600"`
 	}
 	BizRedis   redis.RedisConf
 	CacheRedis cache.CacheConf
